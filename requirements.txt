@@ -1,0 +1,7 @@
+streamlit
+grok
+openai
+torch
+python-dotenv
+transformers
+sentencepiece
