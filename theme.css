@@ -1,0 +1,22 @@
+body, .stApp, .reportview-container {
+    background-color: #101010 !important;
+    color: #eaeaea !important;
+  }
+  .bubble {
+    background: #22293b;
+    padding: 1em;
+    margin: 1em 0;
+    border-radius: 12px;
+    color: #fff;
+    max-width: 90%;
+  }
+  .bubble.user {
+    background: #33415c;
+    margin-left: auto;
+    text-align: right;
+  }
+  .bubble.bot {
+    background: #20435c;
+    margin-right: auto;
+    text-align: left;
+  }
