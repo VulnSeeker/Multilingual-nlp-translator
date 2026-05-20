@@ -1,7 +1,5 @@
-
 import streamlit as st
 import os
-from transformers import MarianMTModel, MarianTokenizer
 from dotenv import load_dotenv
 from groq import Groq
 
@@ -9,33 +7,17 @@ from groq import Groq
 load_dotenv()
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-# Pick one:
-# - "llama-3.1-8b-instant" (fast)
-# - "llama-3.3-70b-versatile" (better quality)
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
-
-MODEL_UR_EN = "Helsinki-NLP/opus-mt-ur-en"
-MODEL_EN_UR = "Helsinki-NLP/opus-mt-en-ur"
-
-tokenizer_ur_en = MarianTokenizer.from_pretrained(MODEL_UR_EN)
-model_ur_en = MarianMTModel.from_pretrained(MODEL_UR_EN)
-tokenizer_en_ur = MarianTokenizer.from_pretrained(MODEL_EN_UR)
-model_en_ur = MarianMTModel.from_pretrained(MODEL_EN_UR)
-
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
-
-# --- TRANSLATION UTILS ---
+# --- UNIVERSAL GROQ TRANSLATION UTILS (ALWAYS CLEAN OUTPUTS) ---
 def roman_urdu_to_urdu(roman_text: str) -> str:
     if not groq_client:
-        return "Groq API key not set. Add GROQ_API_KEY to your .env file."
-
+        return "Groq API key not set."
     prompt = (
-        "Convert this Roman Urdu sentence to Urdu script. "
-        "Return only the Urdu sentence (no explanation):\n"
-        f'{roman_text}'
+        f'Convert this Roman Urdu to Urdu script. '
+        f'RETURN ONLY the translated Urdu sentence. No labels, formatting, asterisks, or explanation. Just the translation: "{roman_text}"'
     )
-
     res = groq_client.chat.completions.create(
         model=GROQ_MODEL,
         messages=[{"role": "user", "content": prompt}],
@@ -47,14 +29,11 @@ def roman_urdu_to_urdu(roman_text: str) -> str:
 
 def urdu_to_roman_urdu(urdu_text: str) -> str:
     if not groq_client:
-        return "Groq API key not set. Add GROQ_API_KEY to your .env file."
-
+        return "Groq API key not set."
     prompt = (
-        "Convert this Urdu sentence to Roman Urdu. "
-        "Return only the Roman Urdu (no explanation):\n"
-        f'{urdu_text}'
+        f'Convert this Urdu to Roman Urdu. '
+        f'RETURN ONLY the Roman Urdu sentence. No labels, asterisks, formatting, or explanation. Just the translation: "{urdu_text}"'
     )
-
     res = groq_client.chat.completions.create(
         model=GROQ_MODEL,
         messages=[{"role": "user", "content": prompt}],
@@ -65,31 +44,50 @@ def urdu_to_roman_urdu(urdu_text: str) -> str:
 
 
 def urdu_to_english(urdu_text: str) -> str:
-    inputs = tokenizer_ur_en(urdu_text, return_tensors="pt", padding=True)
-    translated = model_ur_en.generate(**inputs)
-    return tokenizer_ur_en.decode(translated[0], skip_special_tokens=True)
+    if not groq_client:
+        return "Groq API key not set."
+    prompt = (
+        f'Translate this Urdu sentence to English. '
+        f'RETURN ONLY the English translation. No labels, formatting, asterisks, or explanation. Just the translation: "{urdu_text}"'
+    )
+    res = groq_client.chat.completions.create(
+        model=GROQ_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=120,
+        temperature=0.2,
+    )
+    return (res.choices[0].message.content or "").strip()
 
 
 def english_to_urdu(english_text: str) -> str:
-    inputs = tokenizer_en_ur(english_text, return_tensors="pt", padding=True)
-    translated = model_en_ur.generate(**inputs)
-    return tokenizer_en_ur.decode(translated[0], skip_special_tokens=True)
-
+    if not groq_client:
+        return "Groq API key not set."
+    prompt = (
+        f'Translate this English sentence to Urdu. '
+        f'RETURN ONLY the Urdu translation. No labels, formatting, asterisks, or explanation. Just the translation: "{english_text}"'
+    )
+    res = groq_client.chat.completions.create(
+        model=GROQ_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=120,
+        temperature=0.2,
+    )
+    return (res.choices[0].message.content or "").strip()
 
 # --- STREAMLIT UI (DARK MODE) ---
 st.set_page_config(
-    page_title="FYP Roman Urdu Translator",
+    page_title="Roman Urdu Translator",
     page_icon="💬",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
-# Apply dark theme if exists
 if os.path.exists("dark-theme.css"):
     with open("dark-theme.css", "r", encoding="utf-8") as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-st.title("💬 Roman Urdu ↔ Urdu ↔ English —  Translator")
+st.title("💬 Roman Urdu ↔ Urdu ↔ English — Translator")
+st.caption(f"All translations by: Groq {GROQ_MODEL}")
 
 # --- Chat-like UI ---
 if "history" not in st.session_state:
@@ -122,10 +120,8 @@ if st.button("Send", use_container_width=True):
             answer = "Please type something first."
         elif direction == "Roman Urdu → English":
             urdu = roman_urdu_to_urdu(user_input)
-            if urdu.startswith("Groq API key not set"):
-                answer = urdu
-            else:
-                answer = f"**Urdu:** {urdu}\n**English:** {urdu_to_english(urdu)}"
+            english = urdu_to_english(urdu)
+            answer = f"**Urdu:** {urdu}\n**English:** {english}"
 
         elif direction == "English → Roman Urdu":
             urdu = english_to_urdu(user_input)
@@ -133,16 +129,20 @@ if st.button("Send", use_container_width=True):
             answer = f"**Urdu:** {urdu}\n**Roman Urdu:** {roman}"
 
         elif direction == "Roman Urdu → Urdu":
-            answer = f"**Urdu:** {roman_urdu_to_urdu(user_input)}"
+            urdu = roman_urdu_to_urdu(user_input)
+            answer = f"**Urdu:** {urdu}"
 
         elif direction == "Urdu → Roman Urdu":
-            answer = f"**Roman Urdu:** {urdu_to_roman_urdu(user_input)}"
+            roman = urdu_to_roman_urdu(user_input)
+            answer = f"**Roman Urdu:** {roman}"
 
         elif direction == "Urdu → English":
-            answer = f"**English:** {urdu_to_english(user_input)}"
+            english = urdu_to_english(user_input)
+            answer = f"**English:** {english}"
 
         elif direction == "English → Urdu":
-            answer = f"**Urdu:** {english_to_urdu(user_input)}"
+            urdu = english_to_urdu(user_input)
+            answer = f"**Urdu:** {urdu}"
 
     except Exception as e:
         answer = f"🚨 Error: {e}"
@@ -160,7 +160,8 @@ for q, a in st.session_state.history:
         unsafe_allow_html=True,
     )
 
+# (Optional) Clear history button
 if st.button("Clear Conversation"):
     st.session_state.history.clear()
 
-st.caption("Ready demo. Groq handles Roman↔Urdu, MarianMT handles Urdu↔English.")
+st.caption(" demo: ALL translations powered by Groq LLM, strict outputs.")
